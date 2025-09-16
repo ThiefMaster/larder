@@ -1,6 +1,9 @@
-use crate::db::{create_alias, create_item, query_item_by_ean, query_item_by_name};
+use crate::db::{
+    add_to_stock, create_alias, create_item, finish_from_stock, open_from_stock, query_item_by_ean,
+    query_item_by_name, remove_from_stock,
+};
 use crate::keyinput::read_input;
-use crate::models::Item;
+use crate::models::{Item, Stock};
 use anyhow::Result;
 use dotenvy::dotenv;
 use openfoodfacts::{self as off, Output};
@@ -21,7 +24,8 @@ enum ScanOp {
     Register,
     Add,
     Remove,
-    // Open,
+    Open,
+    Finish,
 }
 
 impl FromStr for ScanOp {
@@ -32,7 +36,8 @@ impl FromStr for ScanOp {
             "+++" => Ok(ScanOp::Register),
             ">>>" => Ok(ScanOp::Add),
             "<<<" => Ok(ScanOp::Remove),
-            // "///" => Ok(ScanOp::Open),
+            "///" => Ok(ScanOp::Open),
+            "</<" => Ok(ScanOp::Finish),
             _ => Err(()),
         }
     }
@@ -47,8 +52,7 @@ fn main() -> Result<()> {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || read_input(&device_path, tx));
 
-    // let mut op = ScanOp::None;
-    let mut op = ScanOp::Register;
+    let mut op = ScanOp::None;
     for line in rx.iter() {
         println!("recv: '{line}'");
         if let Ok(new_op) = ScanOp::from_str(&line) {
@@ -65,14 +69,81 @@ fn main() -> Result<()> {
 }
 
 fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
-    let existing = query_item_by_ean(barcode)?;
-    if op == ScanOp::Register {
-        register(barcode, existing)?;
-        return Ok(());
+    let mut existing = query_item_by_ean(barcode)?;
+    match op {
+        ScanOp::None => {
+            match existing {
+                Some(item) => println!("Item found {item:?}"),
+                None => println!("No such item: {barcode}"),
+            };
+        }
+        ScanOp::Register => {
+            register(barcode, existing)?;
+        }
+        ScanOp::Add => {
+            if existing.is_none() {
+                println!("Trying to add {barcode}, but no item found");
+                existing = register(barcode, existing)?;
+                if existing.is_none() {
+                    println!("  no item added");
+                    return Ok(());
+                }
+            }
+            add(existing.unwrap())?;
+        }
+        ScanOp::Remove => {
+            if existing.is_none() {
+                println!("Cannot remove {barcode}, no item found");
+                return Ok(());
+            }
+            remove(existing.unwrap())?;
+        }
+        ScanOp::Open => {
+            if existing.is_none() {
+                println!("Cannot open {barcode}, no item found");
+                return Ok(());
+            }
+            open(existing.unwrap())?;
+        }
+        ScanOp::Finish => {
+            if existing.is_none() {
+                println!("Cannot finish {barcode}, no item found");
+                return Ok(());
+            }
+            finish(existing.unwrap())?;
+        }
     }
-    match existing {
-        Some(item) => println!("found: {item:?}"),
-        None => println!("unknown item"),
+    Ok(())
+}
+
+fn add(item: Item) -> Result<Stock> {
+    println!("  adding to stock: {}", item.name);
+    add_to_stock(&item)
+}
+
+fn remove(item: Item) -> Result<()> {
+    println!("  removing from stock: {}", item.name);
+    match remove_from_stock(&item)? {
+        Ok(_) => println!("  successful"),
+        Err(err) => println!("  {err}"),
+    }
+    Ok(())
+}
+
+fn open(item: Item) -> Result<()> {
+    println!("  opening: {}", item.name);
+    match open_from_stock(&item)? {
+        Ok(_) => println!("  successful"),
+        Err(err) => println!("  {err}"),
+    }
+    Ok(())
+}
+
+fn finish(item: Item) -> Result<()> {
+    println!("  finishing: {}", item.name);
+    match finish_from_stock(&item)? {
+        Ok(_) => println!("  successful"),
+        Err(err) => println!("  {err}"),
     }
     Ok(())
 }

@@ -1,8 +1,8 @@
 use anyhow::Result;
-use diesel::prelude::*;
+use diesel::{prelude::*, sql_query, sql_types::Integer};
 use std::env;
 
-use crate::models::{Alias, Item, ItemKind, NewItem, lower};
+use crate::models::{Alias, Item, ItemKind, NewItem, Stock, lower};
 
 fn connect_db() -> Result<PgConnection> {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -80,4 +80,118 @@ pub fn create_alias(alias_ean: &str, item_ean: &str) -> Result<Alias> {
         .returning(Alias::as_returning())
         .get_result(conn)
         .map_err(|err| anyhow::anyhow!("Could not insert alias {new_alias:?}: {err}"))
+}
+
+pub fn add_to_stock(item: &Item) -> Result<Stock> {
+    use crate::schema::stock;
+    use crate::schema::stock::dsl::*;
+
+    let conn = &mut connect_db()?;
+    diesel::insert_into(stock::table)
+        .values(item_id.eq(item.id))
+        .returning(Stock::as_returning())
+        .get_result(conn)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "Could not insert stock for {item_id:?}: {err}",
+                item_id = item.id
+            )
+        })
+}
+
+pub fn remove_from_stock(item: &Item) -> Result<Result<()>> {
+    let conn = &mut connect_db()?;
+    let rows = sql_query(
+        r#"
+        with oldest as (
+            select id
+            from stock
+            where item_id = $1 and opened_dt is null and removed_dt is null
+            order by added_dt asc
+            limit 1
+        )
+        update stock s
+        set removed_dt = now()
+        from oldest
+        where s.id = oldest.id;
+        "#,
+    )
+    .bind::<Integer, _>(item.id)
+    .execute(conn)?;
+    Ok(if rows > 0 {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("item not in stock"))
+    })
+}
+
+pub fn open_from_stock(item: &Item) -> Result<Result<()>> {
+    use crate::schema::stock::dsl::*;
+    use diesel::dsl::{exists, select};
+
+    let conn = &mut connect_db()?;
+
+    let already_open = select(exists(
+        stock.filter(
+            item_id
+                .eq(item.id)
+                .and(removed_dt.is_null())
+                .and(opened_dt.is_not_null()),
+        ),
+    ))
+    .get_result::<bool>(conn)?;
+    if already_open {
+        // TODO decide whether to allow having more than one open stock for an item
+        return Ok(Err(anyhow::anyhow!("found open item in stock")));
+    }
+
+    let rows = sql_query(
+        r#"
+        with oldest as (
+            select id
+            from stock
+            where item_id = $1 and opened_dt is null and removed_dt is null
+            order by added_dt asc
+            limit 1
+        )
+        update stock s
+        set opened_dt = now()
+        from oldest
+        where s.id = oldest.id;
+        "#,
+    )
+    .bind::<Integer, _>(item.id)
+    .execute(conn)?;
+    Ok(if rows > 0 {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("item not in stock"))
+    })
+}
+
+pub fn finish_from_stock(item: &Item) -> Result<Result<()>> {
+    let conn = &mut connect_db()?;
+
+    let rows = sql_query(
+        r#"
+        with oldest as (
+            select id
+            from stock
+            where item_id = $1 and opened_dt is not null and removed_dt is null
+            order by opened_dt asc
+            limit 1
+        )
+        update stock s
+        set removed_dt = now()
+        from oldest
+        where s.id = oldest.id;
+        "#,
+    )
+    .bind::<Integer, _>(item.id)
+    .execute(conn)?;
+    Ok(if rows > 0 {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("item not in stock or not opened"))
+    })
 }

@@ -25,4 +25,16 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(aliases, items,);
+diesel::table! {
+    stock (id) {
+        id -> Int4,
+        item_id -> Int4,
+        added_dt -> Timestamp,
+        opened_dt -> Nullable<Timestamp>,
+        removed_dt -> Nullable<Timestamp>,
+    }
+}
+
+diesel::joinable!(stock -> items (item_id));
+
+diesel::allow_tables_to_appear_in_same_query!(aliases, items, stock,);

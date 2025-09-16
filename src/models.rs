@@ -1,13 +1,14 @@
 use diesel::prelude::*;
 use diesel::sql_types::Text;
 
-use crate::schema::{aliases, items};
+use crate::schema::{aliases, items, stock};
 use diesel::deserialize::{FromSql, FromSqlRow};
 use diesel::expression::AsExpression;
 use diesel::pg::{Pg, PgValue};
 use diesel::serialize::{IsNull, Output, ToSql};
 use diesel::{deserialize, serialize};
 use std::io::Write;
+use std::time::SystemTime;
 
 #[derive(Debug, Clone, FromSqlRow, AsExpression, PartialEq, Eq)]
 #[diesel(sql_type = crate::schema::sql_types::ItemKind)]
@@ -40,6 +41,17 @@ pub struct NewItem<'a> {
 pub struct Alias {
     pub ean: String,
     pub alias_for: String,
+}
+
+#[derive(Debug, Queryable, Selectable)]
+#[diesel(table_name = stock)]
+#[allow(dead_code)]
+pub struct Stock {
+    pub id: i32,
+    pub item_id: i32,
+    pub added_dt: SystemTime,
+    pub opened_dt: Option<SystemTime>,
+    pub removed_dt: Option<SystemTime>,
 }
 
 impl ToSql<crate::schema::sql_types::ItemKind, Pg> for ItemKind {
