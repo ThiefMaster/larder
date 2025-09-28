@@ -176,10 +176,10 @@ fn register(barcode: &str, existing: Option<Item>) -> Result<Option<Item>> {
         return Ok(None);
     }
     println!("  looking up name via openfoodfacts");
-    let name = lookup(&barcode)?
-        .and_then(|n| {
+    let name = lookup(barcode)?
+        .map(|n| {
             println!(r#"  found "{n}""#);
-            Some(n.to_string())
+            n.to_string()
         })
         .or_else(|| {
             print!("  nothing found, enter manually: ");

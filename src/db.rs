@@ -13,9 +13,8 @@ fn connect_db() -> Result<PgConnection> {
 pub fn query_item_by_ean(barcode_ean: &str) -> Result<Option<Item>> {
     use crate::schema::items::dsl::*;
 
-    let mut conn = &mut connect_db()?;
-    let barcode_ean =
-        query_ean_by_alias(&mut conn, &barcode_ean)?.unwrap_or(barcode_ean.to_string());
+    let conn = &mut connect_db()?;
+    let barcode_ean = query_ean_by_alias(conn, barcode_ean)?.unwrap_or(barcode_ean.to_string());
 
     items
         .filter(ean.eq(barcode_ean.as_str()))

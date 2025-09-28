@@ -1,6 +1,5 @@
 use std::sync::mpsc::Sender;
 
-use evdev;
 use xkbcommon::xkb;
 
 const KEYCODE_OFFSET: u16 = 8;
