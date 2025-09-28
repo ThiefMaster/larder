@@ -9,6 +9,7 @@ use dotenvy::dotenv;
 use openfoodfacts::{self as off, Output};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::time::Duration;
 use std::{str::FromStr, sync::mpsc, thread};
 use text_io::read;
 
@@ -17,6 +18,8 @@ mod keyinput;
 mod models;
 mod schema;
 // mod web;
+
+static IDLE_TIMEOUT: u64 = 120;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum ScanOp {
@@ -54,19 +57,31 @@ fn main() -> Result<()> {
     thread::spawn(move || read_input(&device_path, tx));
 
     let mut op = ScanOp::None;
-    for line in rx.iter() {
-        println!("recv: '{line}'");
-        if let Ok(new_op) = ScanOp::from_str(&line) {
-            if new_op != op {
-                println!("scan op changed: {op:?} -> {new_op:?}");
-                op = new_op;
+    let idle_timeout = Duration::from_secs(IDLE_TIMEOUT);
+    loop {
+        match rx.recv_timeout(idle_timeout) {
+            Ok(line) => {
+                println!("recv: '{line}'");
+                if let Ok(new_op) = ScanOp::from_str(&line) {
+                    if new_op != op {
+                        println!("scan op changed: {op:?} -> {new_op:?}");
+                        op = new_op;
+                    }
+                } else if let Err(err) = scanned(op, &line) {
+                    println!("processing scan {line} failed: {err}");
+                }
             }
-        } else if let Err(err) = scanned(op, &line) {
-            println!("processing scan {line} failed: {err}");
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if op != ScanOp::None {
+                    println!("scan op reset: {op:?} -> None");
+                    op = ScanOp::None;
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                panic!("Input channel disconnected");
+            }
         }
     }
-
-    Ok(())
 }
 
 fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
