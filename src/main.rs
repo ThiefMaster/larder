@@ -117,12 +117,17 @@ fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
 }
 
 fn add(item: Item) -> Result<Stock> {
-    println!("  adding to stock: {}", item.name);
-    add_to_stock(&item)
+    println!("Adding to stock: {}", item.name);
+    let res = add_to_stock(&item);
+    match res {
+        Ok(_) => println!("  successful"),
+        Err(ref err) => println!("  {err}"),
+    }
+    res
 }
 
 fn remove(item: Item) -> Result<()> {
-    println!("  removing from stock: {}", item.name);
+    println!("Removing from stock: {}", item.name);
     match remove_from_stock(&item)? {
         Ok(_) => println!("  successful"),
         Err(err) => println!("  {err}"),
@@ -131,7 +136,7 @@ fn remove(item: Item) -> Result<()> {
 }
 
 fn open(item: Item) -> Result<()> {
-    println!("  opening: {}", item.name);
+    println!("Opening: {}", item.name);
     match open_from_stock(&item)? {
         Ok(_) => println!("  successful"),
         Err(err) => println!("  {err}"),
@@ -140,7 +145,7 @@ fn open(item: Item) -> Result<()> {
 }
 
 fn finish(item: Item) -> Result<()> {
-    println!("  finishing: {}", item.name);
+    println!("Finishing: {}", item.name);
     match finish_from_stock(&item)? {
         Ok(_) => println!("  successful"),
         Err(err) => println!("  {err}"),
