@@ -33,6 +33,7 @@ impl FromStr for ScanOp {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "???" => Ok(ScanOp::None),
             "+++" => Ok(ScanOp::Register),
             ">>>" => Ok(ScanOp::Add),
             "<<<" => Ok(ScanOp::Remove),
