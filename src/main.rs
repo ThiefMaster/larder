@@ -1,6 +1,6 @@
 use crate::db::{
     add_to_stock, create_alias, create_item, finish_from_stock, open_from_stock, query_item_by_ean,
-    query_item_by_name, remove_from_stock,
+    query_item_by_name, remove_from_stock, search_custom_items_by_name,
 };
 use crate::keyinput::read_input;
 use crate::models::{Item, Stock};
@@ -43,6 +43,7 @@ impl FromStr for ScanOp {
             "<<<" => Ok(ScanOp::Remove),
             "///" => Ok(ScanOp::Open),
             "</<" => Ok(ScanOp::Finish),
+            // ~+~ => create custom: handled separately, it's an action and not an op that affects later scans
             _ => Err(()),
         }
     }
@@ -68,6 +69,10 @@ fn main() -> Result<()> {
                         println!("scan op changed: {op:?} -> {new_op:?}");
                         op = new_op;
                     }
+                } else if line == "~+~" {
+                    if let Err(err) = create_custom() {
+                        println!("creating custom item failed: {err}");
+                    }
                 } else if let Err(err) = scanned(op, &line) {
                     println!("processing scan {line} failed: {err}");
                 }
@@ -83,6 +88,95 @@ fn main() -> Result<()> {
             }
         }
     }
+}
+
+fn create_custom() -> Result<()> {
+    println!("Adding custom item");
+    print!("  enter name: ");
+    tcflush(0, TCIOFLUSH).unwrap();
+    let name: String = read!("{}\n");
+    if name.is_empty() {
+        println!();
+        anyhow::bail!("no name provided");
+    }
+    let candidates = search_custom_items_by_name(&name)?;
+    let item = if let [cand] = candidates.as_slice()
+        && cand.name.to_lowercase() == name.to_lowercase()
+    {
+        println!("  found existing item");
+        candidates[0].to_owned()
+    } else if !candidates.is_empty() {
+        println!("  found {} existing items:", candidates.len());
+        for (i, item) in candidates.iter().enumerate() {
+            println!("  - [{}] {}", i + 1, item.name);
+        }
+        print!("  enter number or leave empty to create new item, X to cancel: ");
+        loop {
+            let choice: String = read!("{}\n");
+            if choice.is_empty() {
+                let item = create_item(None, &name)?;
+                println!("  created {item:?}");
+                break item;
+            } else if choice.to_lowercase() == "x" {
+                anyhow::bail!("aborted");
+            } else {
+                let idx = match choice.parse::<usize>() {
+                    Err(err) => {
+                        print!("  invalid input ({err}), try again: ");
+                        continue;
+                    }
+                    Ok(0) => {
+                        print!("  invalid index, try again: ");
+                        continue;
+                    }
+                    Ok(idx) => idx,
+                };
+                match candidates.get(idx - 1) {
+                    Some(item) => break item.to_owned(),
+                    None => {
+                        print!("  invalid index, try again: ");
+                        continue;
+                    }
+                }
+            };
+        }
+    } else {
+        print!("  no existing item found, create new? [Y/n] ");
+        tcflush(0, TCIOFLUSH).unwrap();
+        let s: String = read!("{}\n");
+        if !s.is_empty() && s.to_lowercase() != "y" {
+            anyhow::bail!("aborted");
+        }
+        let item = create_item(None, &name)?;
+        println!("  created {item:?}");
+        item
+    };
+    print!("  enter count [1]: ");
+    let count = loop {
+        let resp: String = read!("{}\n");
+        if resp.is_empty() {
+            break 1;
+        } else {
+            match resp.parse::<u8>() {
+                Err(err) => {
+                    println!("  invalid input ({err}), try again: ");
+                    continue;
+                }
+                Ok(0) => {
+                    anyhow::bail!("nothing to add to stock");
+                }
+                Ok(count) => break count,
+            }
+        };
+    };
+    for i in 0..count {
+        println!("  adding to stock [{}/{}]", i + 1, count);
+        let stock = add_to_stock(&item)?;
+        let code = format!("~{}|{}~", stock.item_id, stock.id);
+        // TODO: actually print a label
+        println!("  print label: code={code}",)
+    }
+    Ok(())
 }
 
 fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
@@ -219,7 +313,7 @@ fn register(barcode: &str, existing: Option<Item>) -> Result<Option<Item>> {
         return Ok(Some(item));
     }
 
-    let item = create_item(barcode, &name)?;
+    let item = create_item(Some(barcode), &name)?;
     println!("  created {item:?}");
     Ok(Some(item))
 }

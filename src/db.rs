@@ -48,13 +48,30 @@ pub fn query_item_by_name(ci_name: &str) -> Result<Option<Item>> {
         .map_err(|err| anyhow::anyhow!("Could not check for similar item: {err}"))
 }
 
-pub fn create_item(barcode_ean: &str, name: &str) -> Result<Item> {
+pub fn search_custom_items_by_name(ci_name: &str) -> Result<Vec<Item>> {
+    use crate::schema::items::dsl::*;
+
+    let conn = &mut connect_db()?;
+    items
+        .filter(name.ilike(format!("%{ci_name}%")))
+        .filter(kind.eq(ItemKind::Custom))
+        .select(Item::as_select())
+        .order(lower(name))
+        .load(conn)
+        .map_err(|err| anyhow::anyhow!("Could not query custom items: {err}"))
+}
+
+pub fn create_item(barcode_ean: Option<&str>, name: &str) -> Result<Item> {
     use crate::schema::items;
 
     let new_item = NewItem {
         name,
-        kind: ItemKind::Bought,
-        ean: Some(barcode_ean),
+        kind: if barcode_ean.is_some() {
+            ItemKind::Bought
+        } else {
+            ItemKind::Custom
+        },
+        ean: barcode_ean,
     };
 
     let conn = &mut connect_db()?;

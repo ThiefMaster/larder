@@ -17,7 +17,7 @@ pub enum ItemKind {
     Custom,
 }
 
-#[derive(Debug, Queryable, Selectable)]
+#[derive(Debug, Clone, Queryable, Selectable)]
 #[diesel(table_name = items)]
 #[allow(dead_code)]
 pub struct Item {
