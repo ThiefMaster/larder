@@ -29,9 +29,9 @@ diesel::table! {
     stock (id) {
         id -> Int4,
         item_id -> Int4,
-        added_dt -> Timestamp,
-        opened_dt -> Nullable<Timestamp>,
-        removed_dt -> Nullable<Timestamp>,
+        added_dt -> Timestamptz,
+        opened_dt -> Nullable<Timestamptz>,
+        removed_dt -> Nullable<Timestamptz>,
     }
 }
 

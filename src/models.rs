@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 use diesel::prelude::*;
 use diesel::sql_types::Text;
 
@@ -8,7 +9,6 @@ use diesel::pg::{Pg, PgValue};
 use diesel::serialize::{IsNull, Output, ToSql};
 use diesel::{deserialize, serialize};
 use std::io::Write;
-use std::time::SystemTime;
 
 #[derive(Debug, Clone, FromSqlRow, AsExpression, PartialEq, Eq)]
 #[diesel(sql_type = crate::schema::sql_types::ItemKind)]
@@ -49,9 +49,9 @@ pub struct Alias {
 pub struct Stock {
     pub id: i32,
     pub item_id: i32,
-    pub added_dt: SystemTime,
-    pub opened_dt: Option<SystemTime>,
-    pub removed_dt: Option<SystemTime>,
+    pub added_dt: DateTime<Local>,
+    pub opened_dt: Option<DateTime<Local>>,
+    pub removed_dt: Option<DateTime<Local>>,
 }
 
 impl ToSql<crate::schema::sql_types::ItemKind, Pg> for ItemKind {

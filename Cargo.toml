@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.99"
-diesel = { version = "2.3.1", features = ["postgres"] }
+chrono = "0.4.42"
+diesel = { version = "2.3.1", features = ["chrono", "postgres"] }
 dotenvy = "0.15.7"
 evdev = "0.13.1"
 openfoodfacts = { git = "https://github.com/openfoodfacts/openfoodfacts-rust.git", version = "0.1.0" }
