@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{str::FromStr, sync::mpsc, thread};
+use termios::{TCIOFLUSH, tcflush};
 use text_io::read;
 
 mod db;
@@ -183,6 +184,7 @@ fn register(barcode: &str, existing: Option<Item>) -> Result<Option<Item>> {
         })
         .or_else(|| {
             print!("  nothing found, enter manually: ");
+            tcflush(0, TCIOFLUSH).unwrap();
             let s: String = read!("{}\n");
             if s.is_empty() {
                 println!();
@@ -207,6 +209,7 @@ fn register(barcode: &str, existing: Option<Item>) -> Result<Option<Item>> {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("name collision with custom item"))?;
         print!("  name collision with {conflict_ean} - create alias? [Y/n] ");
+        tcflush(0, TCIOFLUSH).unwrap();
         let s: String = read!("{}\n");
         if !s.is_empty() && s.to_lowercase() != "y" {
             anyhow::bail!("Unresolved name conflict");
