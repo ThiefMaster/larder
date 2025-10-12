@@ -1,5 +1,5 @@
 use anyhow::Result;
-use diesel::{prelude::*, sql_query, sql_types::Integer};
+use diesel::{dsl::now, prelude::*, sql_query, sql_types::Integer};
 use std::env;
 
 use crate::models::{Alias, Item, ItemKind, NewItem, Stock, lower};
@@ -46,6 +46,18 @@ pub fn query_item_by_name(ci_name: &str) -> Result<Option<Item>> {
         .first(conn)
         .optional()
         .map_err(|err| anyhow::anyhow!("Could not check for similar item: {err}"))
+}
+
+pub fn query_item_by_id(id: i32) -> Result<Option<Item>> {
+    use crate::schema::items::dsl::items;
+
+    let conn = &mut connect_db()?;
+    items
+        .find(id)
+        .select(Item::as_select())
+        .first(conn)
+        .optional()
+        .map_err(|err| anyhow::anyhow!("Could not get item: {err}"))
 }
 
 pub fn search_custom_items_by_name(ci_name: &str) -> Result<Vec<Item>> {
@@ -115,25 +127,39 @@ pub fn add_to_stock(item: &Item) -> Result<Stock> {
         })
 }
 
-pub fn remove_from_stock(item: &Item) -> Result<Result<()>> {
+pub fn remove_from_stock(item: &Item, stock_id: Option<i32>) -> Result<Result<()>> {
+    use crate::schema::stock;
+    use crate::schema::stock::dsl;
+
     let conn = &mut connect_db()?;
-    let rows = sql_query(
-        r#"
-        with oldest as (
-            select id
-            from stock
-            where item_id = $1 and opened_dt is null and removed_dt is null
-            order by added_dt asc
-            limit 1
-        )
-        update stock s
-        set removed_dt = now()
-        from oldest
-        where s.id = oldest.id;
+    let rows = match stock_id {
+        None => sql_query(
+            r#"
+            with oldest as (
+                select id
+                from stock
+                where item_id = $1 and opened_dt is null and removed_dt is null
+                order by added_dt asc
+                limit 1
+            )
+            update stock s
+            set removed_dt = now()
+            from oldest
+            where s.id = oldest.id;
         "#,
-    )
-    .bind::<Integer, _>(item.id)
-    .execute(conn)?;
+        )
+        .bind::<Integer, _>(item.id)
+        .execute(conn)?,
+        Some(stock_id) => diesel::update(stock::table)
+            .filter(
+                dsl::id
+                    .eq(stock_id)
+                    .and(dsl::item_id.eq(item.id))
+                    .and(dsl::removed_dt.is_null()),
+            )
+            .set(dsl::removed_dt.eq(now))
+            .execute(conn)?,
+    };
     Ok(if rows > 0 {
         Ok(())
     } else {

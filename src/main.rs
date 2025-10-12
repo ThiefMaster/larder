@@ -1,6 +1,6 @@
 use crate::db::{
     add_to_stock, create_alias, create_item, finish_from_stock, open_from_stock, query_item_by_ean,
-    query_item_by_name, remove_from_stock, search_custom_items_by_name,
+    query_item_by_id, query_item_by_name, remove_from_stock, search_custom_items_by_name,
 };
 use crate::keyinput::read_input;
 use crate::models::{Item, Stock};
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::{str::FromStr, sync::mpsc, thread};
 use termios::{TCIOFLUSH, tcflush};
-use text_io::read;
+use text_io::{read, try_scan};
 
 mod db;
 mod keyinput;
@@ -73,6 +73,10 @@ fn main() -> Result<()> {
                     if let Err(err) = create_custom() {
                         println!("creating custom item failed: {err}");
                     }
+                } else if let Some((item_id, stock_id)) = parse_custom_code(&line) {
+                    if let Err(err) = remove_custom(item_id, stock_id) {
+                        println!("removing custom item from stock failed: {err}");
+                    }
                 } else if let Err(err) = scanned(op, &line) {
                     println!("processing scan {line} failed: {err}");
                 }
@@ -88,6 +92,19 @@ fn main() -> Result<()> {
             }
         }
     }
+}
+
+fn parse_custom_code(line: &str) -> Option<(i32, i32)> {
+    // AFAICT, `try_read!` does not support more than one placeholder, and
+    // unfortunately `try_scan!` includes a hardcoded `?` for error handling,
+    // so we need this extra function to get the Result which we can then
+    // convert to na Option
+    let inner = || -> Result<(i32, i32)> {
+        let (item_id, stock_id): (i32, i32);
+        try_scan!(line.bytes() => "~{}|{}~", item_id, stock_id);
+        Ok((item_id, stock_id))
+    };
+    inner().ok()
 }
 
 fn create_custom() -> Result<()> {
@@ -179,6 +196,22 @@ fn create_custom() -> Result<()> {
     Ok(())
 }
 
+fn remove_custom(item_id: i32, stock_id: i32) -> Result<()> {
+    let item = match query_item_by_id(item_id)? {
+        None => {
+            println!("Cannot remove custom item {item_id}, not found");
+            return Ok(());
+        }
+        Some(item) => item,
+    };
+    println!("Removing custom from stock: {}", item.name);
+    match remove_from_stock(&item, Some(stock_id))? {
+        Ok(_) => println!("  successful"),
+        Err(err) => println!("  {err}"),
+    }
+    Ok(())
+}
+
 fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
     let mut existing = query_item_by_ean(barcode)?;
     match op {
@@ -239,7 +272,7 @@ fn add(item: Item) -> Result<Stock> {
 
 fn remove(item: Item) -> Result<()> {
     println!("Removing from stock: {}", item.name);
-    match remove_from_stock(&item)? {
+    match remove_from_stock(&item, None)? {
         Ok(_) => println!("  successful"),
         Err(err) => println!("  {err}"),
     }
