@@ -3,6 +3,7 @@ use crate::db::{
     query_item_by_id, query_item_by_name, remove_from_stock, search_custom_items_by_name,
 };
 use crate::keyinput::read_input;
+use crate::labels::print_custom_item_label;
 use crate::models::{Item, Stock};
 use anyhow::Result;
 use dotenvy::dotenv;
@@ -16,7 +17,9 @@ use text_io::{read, try_scan};
 
 mod db;
 mod keyinput;
+mod labels;
 mod models;
+mod niimbot;
 mod schema;
 // mod web;
 
@@ -190,8 +193,19 @@ fn create_custom() -> Result<()> {
         println!("  adding to stock [{}/{}]", i + 1, count);
         let stock = add_to_stock(&item)?;
         let code = format!("~{}|{}~", stock.item_id, stock.id);
-        // TODO: actually print a label
-        println!("  print label: code={code}",)
+        loop {
+            match print_custom_item_label(&item, &code, &stock.added_dt.date_naive()) {
+                Ok(true) => break,
+                Ok(false) => println!("  could not print label"),
+                Err(err) => println!("  printing label failed: {err}"),
+            }
+            print!("  retry printing? [Y/n] ");
+            tcflush(0, TCIOFLUSH).unwrap();
+            let s: String = read!("{}\n");
+            if !s.is_empty() && s.to_lowercase() != "y" {
+                anyhow::bail!("Printing failed")
+            }
+        }
     }
     Ok(())
 }
