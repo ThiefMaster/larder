@@ -8,7 +8,7 @@ anyhow = "1.0.100"
 base64 = "0.22.1"
 chrono = "0.4.42"
 datamatrix = "0.3.2"
-diesel = { version = "2.3.2", features = ["chrono", "postgres"] }
+diesel = { version = "2.3.3", features = ["chrono", "postgres"] }
 dotenvy = "0.15.7"
 evdev = "0.13.2"
 openfoodfacts = { git = "https://github.com/openfoodfacts/openfoodfacts-rust.git", version = "0.1.0" }
