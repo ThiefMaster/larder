@@ -19,7 +19,6 @@ mod db;
 mod keyinput;
 mod labels;
 mod models;
-mod niimbot;
 mod schema;
 // mod web;
 
