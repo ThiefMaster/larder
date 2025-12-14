@@ -4,7 +4,7 @@ use std::env;
 
 use crate::models::{Alias, Item, ItemKind, NewItem, Stock, lower};
 
-fn connect_db() -> Result<PgConnection> {
+pub fn connect_db() -> Result<PgConnection> {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     PgConnection::establish(&database_url)
         .map_err(|err| anyhow::anyhow!("Error connecting to {database_url}: {err}"))
@@ -110,11 +110,14 @@ pub fn create_alias(alias_ean: &str, item_ean: &str) -> Result<Alias> {
         .map_err(|err| anyhow::anyhow!("Could not insert alias {new_alias:?}: {err}"))
 }
 
-pub fn add_to_stock(item: &Item) -> Result<Stock> {
+pub fn add_to_stock(item: &Item, conn: Option<&mut PgConnection>) -> Result<Stock> {
     use crate::schema::stock;
     use crate::schema::stock::dsl::*;
 
-    let conn = &mut connect_db()?;
+    let conn = match conn {
+        Some(conn) => conn,
+        None => &mut connect_db()?,
+    };
     diesel::insert_into(stock::table)
         .values(item_id.eq(item.id))
         .returning(Stock::as_returning())

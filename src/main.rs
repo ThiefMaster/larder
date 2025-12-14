@@ -1,11 +1,13 @@
 use crate::db::{
-    add_to_stock, create_alias, create_item, finish_from_stock, open_from_stock, query_item_by_ean,
-    query_item_by_id, query_item_by_name, remove_from_stock, search_custom_items_by_name,
+    add_to_stock, connect_db, create_alias, create_item, finish_from_stock, open_from_stock,
+    query_item_by_ean, query_item_by_id, query_item_by_name, remove_from_stock,
+    search_custom_items_by_name,
 };
 use crate::keyinput::read_input;
-use crate::labels::print_custom_item_label;
+use crate::labels::print_custom_item_labels;
 use crate::models::{Item, Stock};
 use anyhow::Result;
+use diesel::Connection;
 use dotenvy::dotenv;
 use openfoodfacts::{self as off, Output};
 use serde_json::{Value, json};
@@ -188,24 +190,16 @@ fn create_custom() -> Result<()> {
             }
         };
     };
-    for i in 0..count {
-        println!("  adding to stock [{}/{}]", i + 1, count);
-        let stock = add_to_stock(&item)?;
-        let code = format!("~{}|{}~", stock.item_id, stock.id);
-        loop {
-            match print_custom_item_label(&item, &code, &stock.added_dt.date_naive()) {
-                Ok(true) => break,
-                Ok(false) => println!("  could not print label"),
-                Err(err) => println!("  printing label failed: {err}"),
-            }
-            print!("  retry printing? [Y/n] ");
-            tcflush(0, TCIOFLUSH).unwrap();
-            let s: String = read!("{}\n");
-            if !s.is_empty() && s.to_lowercase() != "y" {
-                anyhow::bail!("Printing failed")
-            }
+    let mut conn = connect_db()?;
+    conn.transaction::<_, anyhow::Error, _>(|conn| {
+        let mut added = Vec::<Stock>::with_capacity(count.into());
+        for i in 0..count {
+            println!("  adding to stock [{}/{}]", i + 1, count);
+            let stock = add_to_stock(&item, Some(conn))?;
+            added.push(stock);
         }
-    }
+        print_custom_item_labels(&item, &added)
+    })?;
     Ok(())
 }
 
@@ -275,7 +269,7 @@ fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
 
 fn add(item: Item) -> Result<Stock> {
     println!("Adding to stock: {}", item.name);
-    let res = add_to_stock(&item);
+    let res = add_to_stock(&item, None);
     match res {
         Ok(_) => println!("  successful"),
         Err(ref err) => println!("  {err}"),

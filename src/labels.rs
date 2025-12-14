@@ -4,7 +4,6 @@ use brother_ql::{
     media::Media,
     printjob::PrintJobBuilder,
 };
-use chrono::NaiveDate;
 use datamatrix::{DataMatrix, SymbolList, placement::PathSegment};
 use derive_typst_intoval::{IntoDict, IntoValue};
 use image::DynamicImage;
@@ -21,7 +20,7 @@ use typst::{Library, LibraryExt};
 use typst::{diag::FileResult, foundations::Dict};
 use typst_kit::fonts::{FontSearcher, FontSlot};
 
-use crate::models::Item;
+use crate::models::{Item, Stock};
 
 #[allow(clippy::type_complexity)]
 static FONT_DATA: OnceLock<(
@@ -31,18 +30,29 @@ static FONT_DATA: OnceLock<(
     Arc<Vec<Font>>,
 )> = OnceLock::new();
 
-pub fn print_custom_item_label(item: &Item, code: &str, date: &NaiveDate) -> Result<bool> {
-    let date = date.format("%m/%y").to_string();
-    let image = generate_label(code, &item.name, &date);
-    println!(
-        "  printing label: code={code} name='{}' date={date}",
-        item.name
-    );
+pub fn print_custom_item_labels(item: &Item, stock_list: &[Stock]) -> Result<()> {
     let info = UsbConnectionInfo::discover()?.ok_or_else(|| anyhow::anyhow!("No printer found"))?;
+    let images: Vec<_> = stock_list
+        .iter()
+        .map(|stock| {
+            let code = format!("~{}|{}~", stock.item_id, stock.id);
+            let date = stock.added_dt.date_naive().format("%m/%y").to_string();
+            println!(
+                "  generating label: code={code} name='{}' date={date}",
+                item.name
+            );
+            generate_label(&code, &item.name, &date)
+        })
+        .collect();
     let mut conn = UsbConnection::open(info)?;
-    let job = PrintJobBuilder::new(Media::C62).add_label(image).build()?;
+    println!("  printing {} labels", images.len());
+    let mut it = images.into_iter();
+    let job = PrintJobBuilder::new(Media::C62)
+        .add_label(it.next().expect("Added at least one stock item"))
+        .add_labels(it)
+        .build()?;
     conn.print(job)?;
-    Ok(true)
+    Ok(())
 }
 
 fn generate_code_svg(code: &str) -> String {
