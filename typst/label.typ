@@ -45,7 +45,7 @@
       width: width - 20pt,
       [
         #place(horizon + left, image(code, height: 100%))
-        #place(horizon + right, block(height: 50%, fill-height-with-text(date)))
+        #place(horizon + right, block(height: 75%, fill-height-with-text(date)))
       ],
     ))
   ]
