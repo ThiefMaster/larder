@@ -23,16 +23,6 @@
 
 #let label(width: length, height: length, date: text, name: text, code: bytes) = {
   set page(width: width, height: height, margin: 0pt)
-
-  let scale_height(target_height: ratio, text: str) = context {
-    let actual_height = measure(box(text)).height
-    let fac = (target_height.pt() / actual_height.pt()) * 100%
-    scale(x: fac, y: fac, reflow: true, text)
-  }
-
-  let date_font_size = calc.min(15% * width, 15% * height)
-  let _font_size = calc.min(15% * width, 15% * height)
-
   set text(font: "Liberation Sans")
 
   if code == none {
