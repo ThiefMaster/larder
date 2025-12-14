@@ -4,7 +4,7 @@ use crate::db::{
     search_custom_items_by_name,
 };
 use crate::keyinput::read_input;
-use crate::labels::print_custom_item_labels;
+use crate::labels::{LabelContent, print_custom_item_labels};
 use crate::models::{Item, Stock};
 use anyhow::Result;
 use diesel::Connection;
@@ -192,13 +192,13 @@ fn create_custom() -> Result<()> {
     };
     let mut conn = connect_db()?;
     conn.transaction::<_, anyhow::Error, _>(|conn| {
-        let mut added = Vec::<Stock>::with_capacity(count.into());
+        let mut labels = Vec::<LabelContent>::with_capacity(count.into());
         for i in 0..count {
             println!("  adding to stock [{}/{}]", i + 1, count);
             let stock = add_to_stock(&item, Some(conn))?;
-            added.push(stock);
+            labels.push(LabelContent::from_item_stock(&item, &stock));
         }
-        print_custom_item_labels(&item, &added)
+        print_custom_item_labels(&labels)
     })?;
     Ok(())
 }

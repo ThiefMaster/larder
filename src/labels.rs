@@ -30,18 +30,41 @@ static FONT_DATA: OnceLock<(
     Arc<Vec<Font>>,
 )> = OnceLock::new();
 
-pub fn print_custom_item_labels(item: &Item, stock_list: &[Stock]) -> Result<()> {
+pub struct LabelContent {
+    pub name: String,
+    pub date: String,
+    pub code: String,
+}
+
+impl LabelContent {
+    pub fn from_item_stock(item: &Item, stock: &Stock) -> Self {
+        Self {
+            name: item.name.clone(),
+            date: stock.added_dt.date_naive().format("%m/%y").to_string(),
+            code: format!("~{}|{}~", stock.item_id, stock.id),
+        }
+    }
+
+    #[allow(unused)]
+    pub fn new(name: &str, code: &str, date: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            date: date.to_string(),
+            code: code.to_string(),
+        }
+    }
+}
+
+pub fn print_custom_item_labels(labels: &[LabelContent]) -> Result<()> {
     let info = UsbConnectionInfo::discover()?.ok_or_else(|| anyhow::anyhow!("No printer found"))?;
-    let images: Vec<_> = stock_list
+    let images: Vec<_> = labels
         .iter()
-        .map(|stock| {
-            let code = format!("~{}|{}~", stock.item_id, stock.id);
-            let date = stock.added_dt.date_naive().format("%m/%y").to_string();
+        .map(|content| {
             println!(
-                "  generating label: code={code} name='{}' date={date}",
-                item.name
+                "  generating label: code={} name='{}' date={}",
+                content.code, content.name, content.date
             );
-            generate_label(&code, &item.name, &date)
+            generate_label(&content.name, &content.code, &content.date)
         })
         .collect();
     let mut conn = UsbConnection::open(info)?;
@@ -83,7 +106,7 @@ fn generate_code_svg(code: &str) -> String {
     svg
 }
 
-fn generate_label(code: &str, name: &str, date: &str) -> DynamicImage {
+fn generate_label(name: &str, code: &str, date: &str) -> DynamicImage {
     let svg = generate_code_svg(code);
 
     let inputs = LabelInput {
