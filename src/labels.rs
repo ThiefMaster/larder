@@ -111,7 +111,7 @@ fn generate_label(name: &str, code: &str, date: &str) -> DynamicImage {
 
     let inputs = LabelInput {
         width: 696,
-        height: 200,
+        height: 150,
         name: name.to_string(),
         date: date.to_string(),
         code: Bytes::from_string(svg),

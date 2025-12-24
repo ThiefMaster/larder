@@ -53,7 +53,7 @@
 
 #label(
   width: sys.inputs.at("width", default: 696) * 1pt,
-  height: sys.inputs.at("height", default: 300) * 1pt,
+  height: sys.inputs.at("height", default: 150) * 1pt,
   name: sys.inputs.at("name", default: "Schupfnudel-Wirsing-Auflauf mit Kassler"),
   date: sys.inputs.at("date", default: "12/25"),
   code: sys.inputs.at("code", default: none),
