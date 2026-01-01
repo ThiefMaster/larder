@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use std::{path::PathBuf, sync::mpsc::Sender};
 
 use xkbcommon::xkb;
 
@@ -23,7 +23,7 @@ impl TryFrom<i32> for KeyState {
     }
 }
 
-pub fn read_input(device_path: &str, tx: Sender<String>) {
+pub fn read_input(device_path: &PathBuf, tx: Sender<String>) {
     // Open evdev device
     let mut device = evdev::Device::open(device_path).expect("Could not open device");
     device.grab().expect("Could not exclusively grab device");

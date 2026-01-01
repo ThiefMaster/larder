@@ -12,6 +12,7 @@ use dotenvy::dotenv;
 use openfoodfacts::{self as off, Output};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Duration;
 use std::{str::FromStr, sync::mpsc, thread};
 use termios::{TCIOFLUSH, tcflush};
@@ -53,11 +54,24 @@ impl FromStr for ScanOp {
     }
 }
 
+fn find_device() -> Result<PathBuf> {
+    let mut enumerator = udev::Enumerator::new()?;
+    enumerator.match_is_initialized()?;
+    enumerator.match_subsystem("input")?;
+    enumerator.match_property("ID_SERIAL", "zlww_USB_Keyboard_BS43")?;
+    let devpath = enumerator
+        .scan_devices()?
+        .filter_map(|dev| dev.devnode().map(|d| d.to_owned()))
+        .next();
+    devpath.ok_or(anyhow::anyhow!("no device found"))
+}
+
 fn main() -> Result<()> {
     dotenv().ok();
-    let device_path = std::env::args()
-        .nth(1)
-        .unwrap_or(String::from("/dev/input/event0"));
+    let device_path = match std::env::args().nth(1).map(PathBuf::from) {
+        Some(path) => path,
+        None => find_device()?,
+    };
 
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || read_input(&device_path, tx));
