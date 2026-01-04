@@ -12,16 +12,27 @@ derive_typst_intoval = "0.6.0"
 diesel = { version = "2.3.3", features = ["chrono", "postgres"] }
 dotenvy = "0.15.7"
 evdev = "0.13.2"
+iced = { version = "0.14.0", default-features = false, features = ["wgpu", "tokio", "wayland", "tiny-skia"] }
 image = { version = "0.25.9", default-features = false, features = ["png"] }
-openfoodfacts = { git = "https://github.com/openfoodfacts/openfoodfacts-rust.git", version = "0.1.0" }
+openfoodfacts = { git = "https://github.com/ThiefMaster/openfoodfacts-rust.git", version = "0.1.0", branch = "update-reqwest" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 serde_repr = "0.1.20"
 serde_with = "3.15.1"
 termios = "0.3.3"
 text_io = "0.1.13"
+tokio = "1.49.0"
 typst = { version = "0.14.2", default-features = false }
 typst-kit = { version = "0.14.2", features = ["embed-fonts"], default-features = false }
 typst-render = { version = "0.14.2", default-features = false }
 udev = "0.9.3"
 xkbcommon = { version = "0.9.0", default-features = false }
+
+[workspace.metadata.cross.target.aarch64-unknown-linux-gnu]
+pre-build = [
+    "dpkg --add-architecture $CROSS_DEB_ARCH",
+    "apt-get update && apt-get -y install libxkbcommon-dev libxkbcommon0:$CROSS_DEB_ARCH"
+]
+
+[patch.crates-io]
+libudev-sys = { git = "https://github.com/Emilgardis/libudev-sys/", branch = "fix-cross-compilation" }

@@ -2,6 +2,8 @@ use std::{path::PathBuf, sync::mpsc::Sender};
 
 use xkbcommon::xkb;
 
+use crate::AppMessage;
+
 const KEYCODE_OFFSET: u16 = 8;
 
 enum KeyState {
@@ -23,7 +25,7 @@ impl TryFrom<i32> for KeyState {
     }
 }
 
-pub fn read_input(device_path: &PathBuf, tx: Sender<String>) {
+pub fn read_input(device_path: &PathBuf, tx: Sender<AppMessage>) {
     // Open evdev device
     let mut device = evdev::Device::open(device_path).expect("Could not open device");
     device.grab().expect("Could not exclusively grab device");
@@ -63,7 +65,7 @@ pub fn read_input(device_path: &PathBuf, tx: Sender<String>) {
                         let key = state.key_get_utf8(xkb_keycode);
                         if ev_keycode == evdev::KeyCode::KEY_ENTER {
                             if !linebuf.is_empty() {
-                                tx.send(linebuf.clone()).unwrap();
+                                tx.send(AppMessage::ScannerInput(linebuf.clone())).unwrap();
                                 linebuf.clear();
                             }
                         } else if !key.is_empty() {

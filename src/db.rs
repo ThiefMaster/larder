@@ -60,6 +60,43 @@ pub fn query_item_by_id(id: i32) -> Result<Option<Item>> {
         .map_err(|err| anyhow::anyhow!("Could not get item: {err}"))
 }
 
+#[derive(Debug)]
+pub struct StockInfo {
+    pub opened: i64,
+    pub unopened: i64,
+}
+
+pub fn query_item_stock(item_id: i32) -> Result<StockInfo> {
+    use crate::schema::stock::dsl;
+
+    let conn = &mut connect_db()?;
+    let num_opened = dsl::stock
+        .filter(
+            dsl::item_id
+                .eq(item_id)
+                .and(dsl::removed_dt.is_null())
+                .and(dsl::opened_dt.is_not_null()),
+        )
+        .count()
+        .get_result(conn)
+        .map_err(|err| anyhow::anyhow!("Could not get item: {err}"))?;
+    let num_unopened = dsl::stock
+        .filter(
+            dsl::item_id
+                .eq(item_id)
+                .and(dsl::removed_dt.is_null())
+                .and(dsl::opened_dt.is_null()),
+        )
+        .count()
+        .get_result(conn)
+        .map_err(|err| anyhow::anyhow!("Could not get item: {err}"))?;
+
+    Ok(StockInfo {
+        opened: num_opened,
+        unopened: num_unopened,
+    })
+}
+
 pub fn search_custom_items_by_name(ci_name: &str) -> Result<Vec<Item>> {
     use crate::schema::items::dsl::*;
 

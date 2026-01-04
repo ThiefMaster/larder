@@ -1,24 +1,30 @@
 use crate::db::{
     add_to_stock, connect_db, create_alias, create_item, finish_from_stock, open_from_stock,
-    query_item_by_ean, query_item_by_id, query_item_by_name, remove_from_stock,
+    query_item_by_ean, query_item_by_id, query_item_by_name, query_item_stock, remove_from_stock,
     search_custom_items_by_name,
 };
+use crate::gui::run_gui;
 use crate::keyinput::read_input;
 use crate::labels::{LabelContent, print_custom_item_labels};
 use crate::models::{Item, Stock};
 use anyhow::Result;
 use diesel::Connection;
 use dotenvy::dotenv;
+use iced::futures::SinkExt;
 use openfoodfacts::{self as off, Output};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::sync::mpsc::Receiver;
 use std::time::Duration;
 use std::{str::FromStr, sync::mpsc, thread};
 use termios::{TCIOFLUSH, tcflush};
 use text_io::{read, try_scan};
+use tokio::runtime::Runtime;
 
 mod db;
+mod gui;
 mod keyinput;
 mod labels;
 mod models;
@@ -28,13 +34,21 @@ mod schema;
 static IDLE_TIMEOUT: u64 = 120;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum ScanOp {
+pub enum ScanOp {
     None,
     Register,
     Add,
     Remove,
     Open,
     Finish,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum AppMessage {
+    ScannerInput(String),
+    GuiOpChange(ScanOp),
+    Toast(String),
+    ClearToast,
 }
 
 impl FromStr for ScanOp {
@@ -50,6 +64,19 @@ impl FromStr for ScanOp {
             "</<" => Ok(ScanOp::Finish),
             // ~+~ => create custom: handled separately, it's an action and not an op that affects later scans
             _ => Err(()),
+        }
+    }
+}
+
+impl Display for ScanOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ScanOp::None => write!(f, "???"),
+            ScanOp::Register => write!(f, "+++"),
+            ScanOp::Add => write!(f, ">>>"),
+            ScanOp::Remove => write!(f, "<<<"),
+            ScanOp::Open => write!(f, "///"),
+            ScanOp::Finish => write!(f, "</<"),
         }
     }
 }
@@ -74,18 +101,44 @@ fn main() -> Result<()> {
     };
 
     let (tx, rx) = mpsc::channel();
+    let (tx_to_gui, rx_from_app) = iced::futures::channel::mpsc::channel(100);
+    let gui_tx = tx.clone();
     thread::spawn(move || read_input(&device_path, tx));
 
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        thread::spawn(|| run_app(rx, Some(tx_to_gui)).ok());
+        run_gui(gui_tx, rx_from_app)?;
+    } else {
+        run_app(rx, None)?;
+    }
+    Ok(())
+}
+
+fn send_to_gui(
+    tx_to_gui: &mut Option<iced::futures::channel::mpsc::Sender<AppMessage>>,
+    msg: AppMessage,
+) {
+    if let Some(tx) = tx_to_gui.as_mut() {
+        Runtime::new().unwrap().block_on(tx.send(msg)).unwrap();
+    }
+}
+
+fn run_app(
+    rx: Receiver<AppMessage>,
+    mut tx_to_gui: Option<iced::futures::channel::mpsc::Sender<AppMessage>>,
+) -> Result<()> {
     let mut op = ScanOp::None;
     let idle_timeout = Duration::from_secs(IDLE_TIMEOUT);
     loop {
         match rx.recv_timeout(idle_timeout) {
-            Ok(line) => {
+            Ok(AppMessage::ScannerInput(line)) => {
                 println!("recv: '{line}'");
+                // send_to_gui()
                 if let Ok(new_op) = ScanOp::from_str(&line) {
                     if new_op != op {
                         println!("scan op changed: {op:?} -> {new_op:?}");
                         op = new_op;
+                        send_to_gui(&mut tx_to_gui, AppMessage::GuiOpChange(op));
                     }
                 } else if line == "~+~" {
                     if let Err(err) = create_custom() {
@@ -95,14 +148,22 @@ fn main() -> Result<()> {
                     if let Err(err) = remove_custom(item_id, stock_id) {
                         println!("removing custom item from stock failed: {err}");
                     }
-                } else if let Err(err) = scanned(op, &line) {
+                } else if let Err(err) = scanned(op, &line, &mut tx_to_gui) {
                     println!("processing scan {line} failed: {err}");
                 }
             }
+            Ok(AppMessage::GuiOpChange(new_op)) => {
+                if new_op != op {
+                    println!("scan op changed via gui: {op:?} -> {new_op:?}");
+                    op = new_op;
+                }
+            }
+            Ok(_) => (),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if op != ScanOp::None {
                     println!("scan op reset: {op:?} -> None");
                     op = ScanOp::None;
+                    send_to_gui(&mut tx_to_gui, AppMessage::GuiOpChange(op));
                 }
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -233,12 +294,28 @@ fn remove_custom(item_id: i32, stock_id: i32) -> Result<()> {
     Ok(())
 }
 
-fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
+fn scanned(
+    op: ScanOp,
+    barcode: &str,
+    tx_to_gui: &mut Option<iced::futures::channel::mpsc::Sender<AppMessage>>,
+) -> Result<()> {
     let mut existing = query_item_by_ean(barcode)?;
     match op {
         ScanOp::None => {
             match existing {
-                Some(item) => println!("Item found {item:?}"),
+                Some(item) => {
+                    println!("Item found {item:?}");
+                    let stock_info = query_item_stock(item.id)?;
+                    let msg = if stock_info.opened == 0 {
+                        format!("{}: {}", item.name, stock_info.unopened)
+                    } else {
+                        format!(
+                            "{}: {} new + {} open",
+                            item.name, stock_info.unopened, stock_info.opened
+                        )
+                    };
+                    send_to_gui(tx_to_gui, AppMessage::Toast(msg));
+                }
                 None => println!("No such item: {barcode}"),
             };
         }
