@@ -1,6 +1,6 @@
 use crate::db::{
     add_to_stock, connect_db, create_alias, create_item, finish_from_stock, open_from_stock,
-    query_item_by_ean, query_item_by_id, query_item_by_name, remove_from_stock,
+    query_item_by_ean, query_item_by_id, query_item_by_name, query_item_stock, remove_from_stock,
     search_custom_items_by_name,
 };
 use crate::keyinput::read_input;
@@ -294,7 +294,11 @@ fn add(item: Item) -> Result<Stock> {
 fn remove(item: Item) -> Result<()> {
     println!("Removing from stock: {}", item.name);
     match remove_from_stock(&item, None)? {
-        Ok(_) => println!("  successful"),
+        Ok(_) => {
+            println!("  successful");
+            let stock_info = query_item_stock(item.id)?;
+            println!("  remaining: {}", stock_info.unopened)
+        }
         Err(err) => println!("  {err}"),
     }
     Ok(())
