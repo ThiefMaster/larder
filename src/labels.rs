@@ -10,6 +10,8 @@ use image::DynamicImage;
 use std::{
     fmt::Write,
     sync::{Arc, OnceLock},
+    thread::sleep,
+    time::Duration,
 };
 use typst::foundations::{Bytes, Datetime, IntoValue};
 use typst::layout::PagedDocument;
@@ -56,7 +58,13 @@ impl LabelContent {
 }
 
 pub fn print_custom_item_labels(labels: &[LabelContent]) -> Result<()> {
-    let info = UsbConnectionInfo::discover()?.ok_or_else(|| anyhow::anyhow!("No printer found"))?;
+    let info = loop {
+        if let Some(info) = UsbConnectionInfo::discover()? {
+            break info;
+        }
+        println!("No printer found, maybe it's turned off?");
+        sleep(Duration::from_secs(1));
+    };
     let images: Vec<_> = labels
         .iter()
         .map(|content| {
