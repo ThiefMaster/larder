@@ -239,7 +239,14 @@ fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
         ScanOp::None => {
             match existing {
                 Some(item) => println!("Item found {item:?}"),
-                None => println!("No such item: {barcode}"),
+                None => {
+                    println!("No such item: {barcode}");
+                    if let Some(off_name) = lookup(barcode)? {
+                        println!("  found on openfoodfacts: {off_name}");
+                    } else {
+                        println!("  not on openfoodfacts")
+                    }
+                }
             };
         }
         ScanOp::Register => {
