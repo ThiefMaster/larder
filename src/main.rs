@@ -238,7 +238,18 @@ fn scanned(op: ScanOp, barcode: &str) -> Result<()> {
     match op {
         ScanOp::None => {
             match existing {
-                Some(item) => println!("Item found {item:?}"),
+                Some(item) => {
+                    println!("Item found {item:?}");
+                    let stock_info = query_item_stock(item.id)?;
+                    if stock_info.opened == 0 {
+                        println!("  stock: {}", stock_info.unopened);
+                    } else {
+                        println!(
+                            "  stock: {} new + {} open",
+                            stock_info.unopened, stock_info.opened
+                        )
+                    };
+                }
                 None => {
                     println!("No such item: {barcode}");
                     if let Some(off_name) = lookup(barcode)? {
