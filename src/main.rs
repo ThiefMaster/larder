@@ -392,6 +392,7 @@ fn lookup(ean: &str) -> Result<Option<String>> {
     }
     data["product"]["product_name_de"]
         .as_str()
+        .filter(|n| !n.is_empty())
         .or(data["product"]["product_name"].as_str())
         .map(|n| Some(n.into()))
         .ok_or(anyhow::anyhow!("Product has no name"))
