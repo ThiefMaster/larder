@@ -37,7 +37,7 @@
   )[
     #place(
       center + top,
-      block(height: height * 50%, fill-height-with-text(name)),
+      block(height: height * 50%, fill-height-with-text(sym.hyph.soft + name)),
       dy: 8pt,
     )
     #place(bottom + center, block(
