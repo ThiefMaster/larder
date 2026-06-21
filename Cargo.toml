@@ -3,6 +3,14 @@ name = "larder"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "larder"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+
 [dependencies]
 anyhow = "1.0.100"
 brother_ql = { version = "2.1.1", features = ["usb", "serde"] }

@@ -114,7 +114,7 @@ fn generate_code_svg(code: &str) -> String {
     svg
 }
 
-fn generate_label(name: &str, code: &str, date: &str) -> DynamicImage {
+pub fn generate_label(name: &str, code: &str, date: &str) -> DynamicImage {
     let svg = generate_code_svg(code);
 
     let inputs = LabelInput {
